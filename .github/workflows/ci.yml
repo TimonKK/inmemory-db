@@ -1,0 +1,56 @@
+name: Test & Lint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.24.2
+      - uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Install dependencies
+        run: go mod tidy
+
+      - name: Run unit tests
+        run: go test -v -coverprofile=coverage.out ./...
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v5
+        with:
+          files:
+            coverage.out
+      - name: Run tests with race detector
+        run: go test -race ./...
+
+  linter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.24.2
+      - uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Install dependencies
+        run: go mod tidy
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.5
+          install-mode: goinstall
+          args: --timeout=10m
