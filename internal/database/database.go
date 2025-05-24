@@ -54,15 +54,14 @@ func (db *Database) ExecQuery(queryStr string) (result string, err error) {
 	case compute.QuerySetID:
 		return db.ExecSet(query)
 	case compute.QueryDeleteID:
-		return db.HandeDelete(query)
+		return db.ExecDelete(query)
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnknownQuery, queryStr)
 	}
 }
 
 func (db *Database) ExecGet(query compute.Query) (string, error) {
-	key := query.Args()[0]
-	value, err := db.storage.Get(key)
+	value, err := db.storage.Get(query.Key())
 	if errors.Is(err, engine.ErrKeyNotFound) {
 		return "no data", nil
 	}
@@ -75,18 +74,15 @@ func (db *Database) ExecGet(query compute.Query) (string, error) {
 }
 
 func (db *Database) ExecSet(query compute.Query) (string, error) {
-	args := query.Args()
-	key, value := args[0], args[1]
-	err := db.storage.Set(key, value)
+	err := db.storage.Set(query.Key(), query.Value())
 	if err != nil {
 		return "", err
 	}
 
 	return "ok", nil
 }
-func (db *Database) HandeDelete(query compute.Query) (string, error) {
-	key := query.Args()[0]
-	err := db.storage.Delete(key)
+func (db *Database) ExecDelete(query compute.Query) (string, error) {
+	err := db.storage.Delete(query.Key())
 	if err != nil {
 		return "", err
 	}

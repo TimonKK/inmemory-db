@@ -63,6 +63,10 @@ func (q *Query) Id() string {
 	return q.id
 }
 
-func (q *Query) Args() []string {
-	return q.args
+func (q *Query) Key() string {
+	return q.args[0]
+}
+
+func (q *Query) Value() string {
+	return q.args[1]
 }
