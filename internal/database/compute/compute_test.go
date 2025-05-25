@@ -1,11 +1,12 @@
 package compute
 
 import (
+	"reflect"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"reflect"
-	"testing"
 )
 
 func TestComputeParseQuery(t *testing.T) {
@@ -45,7 +46,7 @@ func TestComputeParseQuery(t *testing.T) {
 		{
 			name: "valid GET abc",
 			raw:  "GET abc",
-			want: Query{id: QueryGetID, args: []string{"abc"}},
+			want: Query{id: QueryTypeGet, args: []string{"abc"}},
 		},
 
 		// SET
@@ -62,7 +63,7 @@ func TestComputeParseQuery(t *testing.T) {
 		{
 			name: "valid SET",
 			raw:  "SET bbb 123",
-			want: Query{id: QuerySetID, args: []string{"bbb", "123"}},
+			want: Query{id: QueryTypeSet, args: []string{"bbb", "123"}},
 		},
 
 		// DELETE
@@ -74,7 +75,7 @@ func TestComputeParseQuery(t *testing.T) {
 		{
 			name: "valid DEL",
 			raw:  "DEL ccc",
-			want: Query{id: QueryDeleteID, args: []string{"ccc"}},
+			want: Query{id: QueryTypeDelete, args: []string{"ccc"}},
 		},
 	}
 

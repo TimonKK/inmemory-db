@@ -3,6 +3,7 @@ package database
 import (
 	"errors"
 	"fmt"
+
 	"github.com/TimonKK/inmemory-db/internal/database/compute"
 	"github.com/TimonKK/inmemory-db/internal/database/storage/engine"
 	"go.uber.org/zap"
@@ -49,11 +50,11 @@ func (db *Database) ExecQuery(queryStr string) (result string, err error) {
 	db.logger.Info("ExecQuery parsed", zap.String("query", query.String()))
 
 	switch query.Id() {
-	case compute.QueryGetID:
+	case compute.QueryTypeGet:
 		return db.ExecGet(query)
-	case compute.QuerySetID:
+	case compute.QueryTypeSet:
 		return db.ExecSet(query)
-	case compute.QueryDeleteID:
+	case compute.QueryTypeDelete:
 		return db.ExecDelete(query)
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnknownQuery, queryStr)

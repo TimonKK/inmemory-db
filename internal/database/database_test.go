@@ -2,8 +2,9 @@ package database
 
 import (
 	"errors"
-	"github.com/TimonKK/inmemory-db/internal/database/compute"
 	"testing"
+
+	"github.com/TimonKK/inmemory-db/internal/database/compute"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -53,7 +54,7 @@ func TestDatabase_Execute(t *testing.T) {
 			query: "GET aaa",
 			mockParse: func(m *MockCompute) {
 				m.On("ParseQuery", "GET aaa").
-					Return(compute.NewQuery(compute.QueryGetID, []string{"aaa"}), nil)
+					Return(compute.NewQuery(compute.QueryTypeGet, []string{"aaa"}), nil)
 			},
 			mockStorage: func(m *MockStorage) {
 				m.On("Get", "aaa").Return("aaa", nil)
@@ -64,7 +65,7 @@ func TestDatabase_Execute(t *testing.T) {
 			query: "SET bbb 123",
 			mockParse: func(m *MockCompute) {
 				m.On("ParseQuery", "SET bbb 123").
-					Return(compute.NewQuery(compute.QuerySetID, []string{"bbb", "123"}), nil)
+					Return(compute.NewQuery(compute.QueryTypeSet, []string{"bbb", "123"}), nil)
 			},
 			mockStorage: func(m *MockStorage) {
 				m.On("Set", "bbb", "123").Return(nil)
@@ -75,7 +76,7 @@ func TestDatabase_Execute(t *testing.T) {
 			query: "DELETE ccc",
 			mockParse: func(m *MockCompute) {
 				m.On("ParseQuery", "DELETE ccc").
-					Return(compute.NewQuery(compute.QueryDeleteID, []string{"ccc"}), nil)
+					Return(compute.NewQuery(compute.QueryTypeDelete, []string{"ccc"}), nil)
 			},
 			mockStorage: func(m *MockStorage) {
 				m.On("Delete", "ccc").Return(nil)

@@ -3,8 +3,9 @@ package compute
 import (
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 var (
@@ -41,15 +42,11 @@ func (c *Compute) parseQuery(query string) (Query, error) {
 		return Query{}, fmt.Errorf("%w: %s", ErrEmptyQuery, query)
 	}
 
-	queryId, args := tokens[0], tokens[1:]
+	queryId, args := QueryType(tokens[0]), tokens[1:]
 
 	switch queryId {
-	case QueryGetID:
-		return NewQuery(QueryGetID, args), nil
-	case QuerySetID:
-		return NewQuery(QuerySetID, args), nil
-	case QueryDeleteID:
-		return NewQuery(QueryDeleteID, args), nil
+	case QueryTypeGet, QueryTypeSet, QueryTypeDelete:
+		return NewQuery(queryId, args), nil
 	default:
 		return Query{}, ErrUnknownQuery
 	}
