@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -24,17 +25,17 @@ type MockStorage struct {
 	mock.Mock
 }
 
-func (m *MockStorage) Set(key, value string) error {
+func (m *MockStorage) Set(_ context.Context, key, value string) error {
 	args := m.Called(key, value)
 	return args.Error(0)
 }
 
-func (m *MockStorage) Get(key string) (string, error) {
+func (m *MockStorage) Get(_ context.Context, key string) (string, error) {
 	args := m.Called(key)
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockStorage) Delete(key string) error {
+func (m *MockStorage) Delete(_ context.Context, key string) error {
 	args := m.Called(key)
 	return args.Error(0)
 }
@@ -54,7 +55,7 @@ func TestDatabase_Execute(t *testing.T) {
 			query: "GET aaa",
 			mockParse: func(m *MockCompute) {
 				m.On("ParseQuery", "GET aaa").
-					Return(compute.NewQuery(compute.QueryTypeGet, []string{"aaa"}), nil)
+					Return(compute.NewQuery(compute.GetCommandId, []string{"aaa"}), nil)
 			},
 			mockStorage: func(m *MockStorage) {
 				m.On("Get", "aaa").Return("aaa", nil)
@@ -65,7 +66,7 @@ func TestDatabase_Execute(t *testing.T) {
 			query: "SET bbb 123",
 			mockParse: func(m *MockCompute) {
 				m.On("ParseQuery", "SET bbb 123").
-					Return(compute.NewQuery(compute.QueryTypeSet, []string{"bbb", "123"}), nil)
+					Return(compute.NewQuery(compute.SetCommandId, []string{"bbb", "123"}), nil)
 			},
 			mockStorage: func(m *MockStorage) {
 				m.On("Set", "bbb", "123").Return(nil)
@@ -76,7 +77,7 @@ func TestDatabase_Execute(t *testing.T) {
 			query: "DELETE ccc",
 			mockParse: func(m *MockCompute) {
 				m.On("ParseQuery", "DELETE ccc").
-					Return(compute.NewQuery(compute.QueryTypeDelete, []string{"ccc"}), nil)
+					Return(compute.NewQuery(compute.DeleteCommandId, []string{"ccc"}), nil)
 			},
 			mockStorage: func(m *MockStorage) {
 				m.On("Delete", "ccc").Return(nil)
@@ -103,7 +104,7 @@ func TestDatabase_Execute(t *testing.T) {
 			tt.mockStorage(mockStorage)
 
 			db := NewDatabase(mockCompute, mockStorage, logger)
-			_, err := db.ExecQuery(tt.query)
+			_, err := db.ExecQuery(context.TODO(), tt.query)
 
 			if tt.expectedError != nil {
 				assert.Error(t, err)

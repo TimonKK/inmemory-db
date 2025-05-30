@@ -46,7 +46,7 @@ func TestComputeParseQuery(t *testing.T) {
 		{
 			name: "valid GET abc",
 			raw:  "GET abc",
-			want: Query{id: QueryTypeGet, args: []string{"abc"}},
+			want: Query{id: GetCommandId, args: []string{"abc"}},
 		},
 
 		// SET
@@ -63,7 +63,7 @@ func TestComputeParseQuery(t *testing.T) {
 		{
 			name: "valid SET",
 			raw:  "SET bbb 123",
-			want: Query{id: QueryTypeSet, args: []string{"bbb", "123"}},
+			want: Query{id: SetCommandId, args: []string{"bbb", "123"}},
 		},
 
 		// DELETE
@@ -75,7 +75,7 @@ func TestComputeParseQuery(t *testing.T) {
 		{
 			name: "valid DEL",
 			raw:  "DEL ccc",
-			want: Query{id: QueryTypeDelete, args: []string{"ccc"}},
+			want: Query{id: DeleteCommandId, args: []string{"ccc"}},
 		},
 	}
 

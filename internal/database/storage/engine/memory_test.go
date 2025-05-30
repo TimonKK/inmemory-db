@@ -1,11 +1,14 @@
 package engine
 
 import (
+	"context"
 	_ "github.com/TimonKK/inmemory-db/internal/database/storage"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+var ctx = context.TODO()
 
 func TestMemoryEngine(t *testing.T) {
 	// Общие настройки
@@ -26,7 +29,7 @@ func TestMemoryEngine(t *testing.T) {
 		{
 			name: "Get existing key",
 			prepare: func(e *MemoryEngine) {
-				_ = e.Set("test", "value") // Используем Set для подготовки
+				_ = e.Set(ctx, "test", "value") // Используем Set для подготовки
 			},
 			key:           "test",
 			expectedValue: "value",
@@ -35,8 +38,8 @@ func TestMemoryEngine(t *testing.T) {
 		{
 			name: "Overwrite existing key",
 			prepare: func(e *MemoryEngine) {
-				_ = e.Set("key", "old")
-				_ = e.Set("key", "new")
+				_ = e.Set(ctx, "key", "old")
+				_ = e.Set(ctx, "key", "new")
 			},
 			key:           "key",
 			expectedValue: "new",
@@ -57,7 +60,7 @@ func TestMemoryEngine(t *testing.T) {
 				engine := NewMemoryEngine()
 				tt.prepare(engine)
 
-				value, err := engine.Get(tt.key)
+				value, err := engine.Get(ctx, tt.key)
 
 				assert.Equal(t, tt.expectedValue, value)
 				if tt.expectedError != nil {
@@ -74,34 +77,34 @@ func TestMemoryEngine_Set(t *testing.T) {
 	engine := NewMemoryEngine()
 
 	t.Run("Set new key", func(t *testing.T) {
-		err := engine.Set("new", "value")
+		err := engine.Set(ctx, "new", "value")
 		assert.NoError(t, err)
 
-		val, err := engine.Get("new")
+		val, err := engine.Get(ctx, "new")
 		assert.Equal(t, "value", val)
 		assert.NoError(t, err)
 	})
 
 	t.Run("Set empty key", func(t *testing.T) {
-		err := engine.Set("", "value")
+		err := engine.Set(ctx, "", "value")
 		assert.NoError(t, err)
 	})
 }
 
 func TestMemoryEngine_Delete(t *testing.T) {
 	engine := NewMemoryEngine()
-	_ = engine.Set("to_delete", "value")
+	_ = engine.Set(ctx, "to_delete", "value")
 
 	t.Run("Delete existing key", func(t *testing.T) {
-		err := engine.Delete("to_delete")
+		err := engine.Delete(ctx, "to_delete")
 		assert.NoError(t, err)
 
-		_, err = engine.Get("to_delete")
+		_, err = engine.Get(ctx, "to_delete")
 		assert.ErrorIs(t, err, ErrKeyNotFound)
 	})
 
 	t.Run("Delete non-existent key", func(t *testing.T) {
-		err := engine.Delete("missing")
+		err := engine.Delete(ctx, "missing")
 		assert.NoError(t, err) // Обычно удаление несуществующего ключа не считается ошибкой
 	})
 }

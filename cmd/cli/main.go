@@ -2,24 +2,33 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
-	"github.com/TimonKK/inmemory-db/internal/database"
-	"github.com/TimonKK/inmemory-db/internal/database/compute"
-	"github.com/TimonKK/inmemory-db/internal/database/storage"
-	"github.com/TimonKK/inmemory-db/internal/database/storage/engine"
+	"github.com/TimonKK/inmemory-db/internal/config"
+	"github.com/TimonKK/inmemory-db/internal/database/network"
 	"go.uber.org/zap"
 	"os"
 	"strings"
 )
 
 func main() {
+	address := flag.String("address", "127.0.0.1:3223", "server address (required), e.g. 127.0.0.1:3223")
+	idleTimeout := flag.Duration("timeout", 0, "timeout for server connection, e.g. 5s, 1m")
+	flag.Parse()
+
+	clientNetworkConfig := config.ClientNetworkConfig{
+		Address:     *address,
+		IdleTimeout: *idleTimeout,
+	}
+
 	logger, _ := zap.NewProduction()
+	logger.Info("Loading clientNetworkConfig", zap.Any("clientNetworkConfig", clientNetworkConfig))
 
-	computeInstance := compute.NewCompute(logger)
-	engineInstance := engine.NewMemoryEngine()
-	storageInstance := storage.NewStorage(engineInstance, logger)
-
-	db := database.NewDatabase(computeInstance, storageInstance, logger)
+	client, err := network.NewTCPClient(&clientNetworkConfig, logger)
+	if err != nil {
+		logger.Fatal("Error connecting", zap.Error(err))
+		return
+	}
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -36,7 +45,7 @@ func main() {
 			break
 		}
 
-		response, err := db.ExecQuery(trimmedInput)
+		response, err := client.Send(trimmedInput)
 		if err != nil {
 			logger.Error("failed to exec query", zap.Error(err))
 		}
