@@ -1,15 +1,23 @@
 CLI_APP_NAME=inmemory-db
 
 .PHONY: build
-build: build-cli
+build: build-server build-cli
 
 .PHONY: build-cli
 build-cli:
-	go build -o ${CLI_APP_NAME}-cli cmd/cli/main.go
+	go build -o tmp/${CLI_APP_NAME}-cli cmd/cli/main.go
+
+.PHONY: build-server
+build-server:
+	go build -o tmp/${CLI_APP_NAME}-cli cmd/server/main.go
 
 .PHONY: run-cli
 run-cli:
 	go run cmd/cli/main.go
+
+.PHONY: run-server
+run-server:
+	go run cmd/server/main.go
 
 .PHONY: lint
 lint:
@@ -17,4 +25,4 @@ lint:
 
 .PHONY: test
 test:
-	go test -v -coverprofile=coverage.out ./...
+	go test -v -race -coverprofile=coverage.out ./...

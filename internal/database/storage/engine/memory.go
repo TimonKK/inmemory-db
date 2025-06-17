@@ -1,12 +1,17 @@
 package engine
 
-import "errors"
+import (
+	"context"
+	"errors"
+	"sync"
+)
 
 var (
 	ErrKeyNotFound = errors.New("key not found")
 )
 
 type MemoryEngine struct {
+	m    sync.RWMutex
 	data map[string]string
 }
 
@@ -16,8 +21,11 @@ func NewMemoryEngine() *MemoryEngine {
 	}
 }
 
-func (memoryEngine *MemoryEngine) Get(key string) (string, error) {
-	value, ok := memoryEngine.data[key]
+func (e *MemoryEngine) Get(_ context.Context, key string) (string, error) {
+	e.m.RLock()
+	defer e.m.RUnlock()
+
+	value, ok := e.data[key]
 	if ok {
 		return value, nil
 	}
@@ -25,14 +33,20 @@ func (memoryEngine *MemoryEngine) Get(key string) (string, error) {
 	return "", ErrKeyNotFound
 }
 
-func (memoryEngine *MemoryEngine) Set(key string, value string) error {
-	memoryEngine.data[key] = value
+func (e *MemoryEngine) Set(_ context.Context, key string, value string) error {
+	e.m.Lock()
+	defer e.m.Unlock()
+
+	e.data[key] = value
 
 	return nil
 }
 
-func (memoryEngine *MemoryEngine) Delete(key string) error {
-	delete(memoryEngine.data, key)
+func (e *MemoryEngine) Delete(_ context.Context, key string) error {
+	e.m.Lock()
+	defer e.m.Unlock()
+
+	delete(e.data, key)
 
 	return nil
 }

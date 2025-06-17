@@ -15,20 +15,12 @@ var (
 
 var argRegex = regexp.MustCompile(`^[a-zA-Z0-9*/_]+$`)
 
-type QueryType string
-
-const (
-	QueryTypeGet    QueryType = "GET"
-	QueryTypeSet    QueryType = "SET"
-	QueryTypeDelete QueryType = "DEL"
-)
-
 type Query struct {
-	id   QueryType
+	id   CommandId
 	args []string
 }
 
-func NewQuery(id QueryType, args []string) Query {
+func NewQuery(id CommandId, args []string) Query {
 	return Query{
 		id:   id,
 		args: args,
@@ -36,15 +28,15 @@ func NewQuery(id QueryType, args []string) Query {
 }
 
 func (q *Query) Validate() error {
-	if q.id == QueryTypeGet && len(q.args) != 1 {
+	if q.id == GetCommandId && len(q.args) != GetCommandArgsCount {
 		return fmt.Errorf("%w: expected=%d, got=%d", ErrQueryArgsCount, 1, len(q.args))
 	}
 
-	if q.id == QueryTypeSet && len(q.args) != 2 {
+	if q.id == SetCommandId && len(q.args) != SetCommandArgsCount {
 		return fmt.Errorf("%w: expected=%d, got=%d", ErrQueryArgsCount, 2, len(q.args))
 	}
 
-	if q.id == QueryTypeDelete && len(q.args) != 1 {
+	if q.id == DeleteCommandId && len(q.args) != DeleteCommandArgsCount {
 		return fmt.Errorf("%w: expected=%d, got=%d", ErrQueryArgsCount, 1, len(q.args))
 	}
 
@@ -61,7 +53,7 @@ func (q *Query) String() string {
 	return fmt.Sprintf("id=%s, args=%s", q.id, strings.Join(q.args, " "))
 }
 
-func (q *Query) Id() QueryType {
+func (q *Query) CommandId() CommandId {
 	return q.id
 }
 

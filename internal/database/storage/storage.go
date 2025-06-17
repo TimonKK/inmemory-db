@@ -1,13 +1,14 @@
 package storage
 
 import (
+	"context"
 	"go.uber.org/zap"
 )
 
 type Engine interface {
-	Get(string) (string, error)
-	Set(string, string) error
-	Delete(string) error
+	Get(context.Context, string) (string, error)
+	Set(context.Context, string, string) error
+	Delete(context.Context, string) error
 }
 
 type Storage struct {
@@ -22,13 +23,24 @@ func NewStorage(engine Engine, logger *zap.Logger) *Storage {
 	}
 }
 
-func (s *Storage) Get(key string) (string, error) {
-	return s.engine.Get(key)
+func (s *Storage) Get(ctx context.Context, key string) (string, error) {
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
+	return s.engine.Get(ctx, key)
 }
 
-func (s *Storage) Set(key, value string) error {
-	return s.engine.Set(key, value)
+func (s *Storage) Set(ctx context.Context, key, value string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return s.engine.Set(ctx, key, value)
 }
-func (s *Storage) Delete(key string) error {
-	return s.engine.Delete(key)
+func (s *Storage) Delete(ctx context.Context, key string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	return s.engine.Delete(ctx, key)
 }

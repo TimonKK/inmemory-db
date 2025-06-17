@@ -42,11 +42,11 @@ func (c *Compute) parseQuery(query string) (Query, error) {
 		return Query{}, fmt.Errorf("%w: %s", ErrEmptyQuery, query)
 	}
 
-	queryId, args := QueryType(tokens[0]), tokens[1:]
+	commandId, args := CommandId(tokens[0]), tokens[1:]
 
-	switch queryId {
-	case QueryTypeGet, QueryTypeSet, QueryTypeDelete:
-		return NewQuery(queryId, args), nil
+	switch commandId {
+	case GetCommandId, SetCommandId, DeleteCommandId:
+		return NewQuery(commandId, args), nil
 	default:
 		return Query{}, ErrUnknownQuery
 	}

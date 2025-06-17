@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -19,9 +20,9 @@ type Compute interface {
 }
 
 type Storage interface {
-	Set(string, string) error
-	Get(string) (string, error)
-	Delete(string) error
+	Set(context.Context, string, string) error
+	Get(context.Context, string) (string, error)
+	Delete(context.Context, string) error
 }
 
 type Database struct {
@@ -38,7 +39,7 @@ func NewDatabase(compute Compute, storage Storage, logger *zap.Logger) *Database
 	}
 }
 
-func (db *Database) ExecQuery(queryStr string) (result string, err error) {
+func (db *Database) ExecQuery(ctx context.Context, queryStr string) (result string, err error) {
 	db.logger.Debug("ExecQuery start", zap.String("query", queryStr))
 	defer db.logger.Debug("ExecQuery", zap.String("result", result))
 
@@ -49,20 +50,20 @@ func (db *Database) ExecQuery(queryStr string) (result string, err error) {
 
 	db.logger.Info("ExecQuery parsed", zap.String("query", query.String()))
 
-	switch query.Id() {
-	case compute.QueryTypeGet:
-		return db.ExecGet(query)
-	case compute.QueryTypeSet:
-		return db.ExecSet(query)
-	case compute.QueryTypeDelete:
-		return db.ExecDelete(query)
+	switch query.CommandId() {
+	case compute.GetCommandId:
+		return db.ExecGet(ctx, query)
+	case compute.SetCommandId:
+		return db.ExecSet(ctx, query)
+	case compute.DeleteCommandId:
+		return db.ExecDelete(ctx, query)
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnknownQuery, queryStr)
 	}
 }
 
-func (db *Database) ExecGet(query compute.Query) (string, error) {
-	value, err := db.storage.Get(query.Key())
+func (db *Database) ExecGet(ctx context.Context, query compute.Query) (string, error) {
+	value, err := db.storage.Get(ctx, query.Key())
 	if errors.Is(err, engine.ErrKeyNotFound) {
 		return "no data", nil
 	}
@@ -74,16 +75,16 @@ func (db *Database) ExecGet(query compute.Query) (string, error) {
 	return fmt.Sprintf("result: %s", value), nil
 }
 
-func (db *Database) ExecSet(query compute.Query) (string, error) {
-	err := db.storage.Set(query.Key(), query.Value())
+func (db *Database) ExecSet(ctx context.Context, query compute.Query) (string, error) {
+	err := db.storage.Set(ctx, query.Key(), query.Value())
 	if err != nil {
 		return "", err
 	}
 
 	return "ok", nil
 }
-func (db *Database) ExecDelete(query compute.Query) (string, error) {
-	err := db.storage.Delete(query.Key())
+func (db *Database) ExecDelete(ctx context.Context, query compute.Query) (string, error) {
+	err := db.storage.Delete(ctx, query.Key())
 	if err != nil {
 		return "", err
 	}
