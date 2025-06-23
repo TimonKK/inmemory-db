@@ -1,17 +1,22 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
+)
+
+var (
+	ErrEmptySizeStr   = errors.New("empty size string")
+	ErrNonNumericSize = errors.New("no numeric value found")
 )
 
 // ParseSizeString преобразует строку вида "4KB" в байты
 func ParseSizeString(sizeStr string) (int64, error) {
 	sizeStr = strings.TrimSpace(strings.ToUpper(sizeStr))
 	if sizeStr == "" {
-		return 0, fmt.Errorf("empty size string")
+		return 0, ErrEmptySizeStr
 	}
 
 	// Отделяем число от единицы измерения
@@ -23,7 +28,7 @@ func ParseSizeString(sizeStr string) (int64, error) {
 	}
 
 	if i == 0 {
-		return 0, fmt.Errorf("no numeric value found")
+		return 0, ErrNonNumericSize
 	}
 
 	num, err := strconv.ParseInt(sizeStr[:i], 10, 64)
@@ -47,13 +52,4 @@ func ParseSizeString(sizeStr string) (int64, error) {
 	default:
 		return 0, fmt.Errorf("unknown size unit: %s", unit)
 	}
-}
-
-func ParseTimeoutDuration(td string) (time.Duration, error) {
-	t, err := time.ParseDuration(td)
-	if err != nil {
-		return 0, fmt.Errorf("invalid timeout duration: %w", err)
-	}
-
-	return t, nil
 }

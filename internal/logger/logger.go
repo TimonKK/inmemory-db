@@ -10,7 +10,7 @@ import (
 
 const (
 	defaultLoggerLevel      = zapcore.InfoLevel
-	defaultLoggerOutputPath = "log.log"
+	defaultLoggerOutputPath = "output.log"
 )
 
 var (
@@ -51,6 +51,8 @@ func NewLogger(config *config.LoggingConfig) (*zap.Logger, error) {
 		Level:       zap.NewAtomicLevelAt(loggerLevel),
 		OutputPaths: []string{loggerOutputPath},
 	}
+
+	loggerConfig.EncoderConfig.MessageKey = "msg"
 
 	return loggerConfig.Build()
 }

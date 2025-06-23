@@ -20,9 +20,10 @@ type Compute interface {
 }
 
 type Storage interface {
-	Set(context.Context, string, string) error
-	Get(context.Context, string) (string, error)
-	Delete(context.Context, string) error
+	Start(ctx context.Context) error
+	Set(context.Context, compute.Query) error
+	Get(context.Context, compute.Query) (string, error)
+	Delete(context.Context, compute.Query) error
 }
 
 type Database struct {
@@ -37,6 +38,10 @@ func NewDatabase(compute Compute, storage Storage, logger *zap.Logger) *Database
 		storage: storage,
 		logger:  logger,
 	}
+}
+
+func (db *Database) Start(ctx context.Context) error {
+	return db.storage.Start(ctx)
 }
 
 func (db *Database) ExecQuery(ctx context.Context, queryStr string) (result string, err error) {
@@ -63,7 +68,7 @@ func (db *Database) ExecQuery(ctx context.Context, queryStr string) (result stri
 }
 
 func (db *Database) ExecGet(ctx context.Context, query compute.Query) (string, error) {
-	value, err := db.storage.Get(ctx, query.Key())
+	value, err := db.storage.Get(ctx, query)
 	if errors.Is(err, engine.ErrKeyNotFound) {
 		return "no data", nil
 	}
@@ -76,7 +81,7 @@ func (db *Database) ExecGet(ctx context.Context, query compute.Query) (string, e
 }
 
 func (db *Database) ExecSet(ctx context.Context, query compute.Query) (string, error) {
-	err := db.storage.Set(ctx, query.Key(), query.Value())
+	err := db.storage.Set(ctx, query)
 	if err != nil {
 		return "", err
 	}
@@ -84,7 +89,7 @@ func (db *Database) ExecSet(ctx context.Context, query compute.Query) (string, e
 	return "ok", nil
 }
 func (db *Database) ExecDelete(ctx context.Context, query compute.Query) (string, error) {
-	err := db.storage.Delete(ctx, query.Key())
+	err := db.storage.Delete(ctx, query)
 	if err != nil {
 		return "", err
 	}

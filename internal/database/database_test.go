@@ -25,18 +25,22 @@ type MockStorage struct {
 	mock.Mock
 }
 
-func (m *MockStorage) Set(_ context.Context, key, value string) error {
-	args := m.Called(key, value)
+func (m *MockStorage) Start(_ context.Context) error {
+	return nil
+}
+
+func (m *MockStorage) Set(_ context.Context, query compute.Query) error {
+	args := m.Called(query)
 	return args.Error(0)
 }
 
-func (m *MockStorage) Get(_ context.Context, key string) (string, error) {
-	args := m.Called(key)
+func (m *MockStorage) Get(_ context.Context, query compute.Query) (string, error) {
+	args := m.Called(query)
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockStorage) Delete(_ context.Context, key string) error {
-	args := m.Called(key)
+func (m *MockStorage) Delete(_ context.Context, query compute.Query) error {
+	args := m.Called(query)
 	return args.Error(0)
 }
 
@@ -58,7 +62,7 @@ func TestDatabase_Execute(t *testing.T) {
 					Return(compute.NewQuery(compute.GetCommandId, []string{"aaa"}), nil)
 			},
 			mockStorage: func(m *MockStorage) {
-				m.On("Get", "aaa").Return("aaa", nil)
+				m.On("Get", compute.NewQuery(compute.GetCommandId, []string{"aaa"})).Return("aaa", nil)
 			},
 		},
 		{
@@ -69,7 +73,7 @@ func TestDatabase_Execute(t *testing.T) {
 					Return(compute.NewQuery(compute.SetCommandId, []string{"bbb", "123"}), nil)
 			},
 			mockStorage: func(m *MockStorage) {
-				m.On("Set", "bbb", "123").Return(nil)
+				m.On("Set", compute.NewQuery(compute.SetCommandId, []string{"bbb", "123"})).Return(nil)
 			},
 		},
 		{
@@ -80,7 +84,7 @@ func TestDatabase_Execute(t *testing.T) {
 					Return(compute.NewQuery(compute.DeleteCommandId, []string{"ccc"}), nil)
 			},
 			mockStorage: func(m *MockStorage) {
-				m.On("Delete", "ccc").Return(nil)
+				m.On("Delete", compute.NewQuery(compute.DeleteCommandId, []string{"ccc"})).Return(nil)
 			},
 		},
 		{
