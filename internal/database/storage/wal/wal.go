@@ -172,12 +172,9 @@ func (w *WAL) Push(data string) error {
 // - отправтиь дальше, не трогая promises
 // - отправтиь дальше, передав ее в promises - только какой смысл?
 func (w *WAL) flushBatch(batch []walRecord) error {
-	w.mu.RLock()
 	if len(batch) == 0 {
-		w.mu.RUnlock()
 		return nil
 	}
-	w.mu.RUnlock()
 
 	w.logger.Info("FlushData: start", zap.Int("batchSize", len(batch)), zap.Int("segmentSize", w.segment.Size()))
 

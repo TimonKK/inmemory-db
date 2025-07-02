@@ -29,9 +29,7 @@ func NewStorage(engine Engine, wal *wal.WAL, logger *zap.Logger) (*Storage, erro
 	return &storage, nil
 }
 
-func (s *Storage) setData(records []compute.Query) error {
-	ctx := context.TODO()
-
+func (s *Storage) setData(ctx context.Context, records []compute.Query) error {
 	var err error
 	for _, query := range records {
 		switch query.CommandId() {
@@ -72,7 +70,7 @@ func (s *Storage) Start(ctx context.Context) error {
 	}
 	s.logger.Info("loading records", zap.Int("records", len(records)))
 
-	err = s.setData(records)
+	err = s.setData(ctx, records)
 	if err != nil {
 		return err
 	}
