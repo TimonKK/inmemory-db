@@ -53,7 +53,7 @@ func (w *WAL) Start(ctx context.Context) error {
 	}
 
 	// TODO добавить явную обработку ошибок и выход при ее наступлении
-	w.StartBackgroundWorker(ctx)
+	w.startBackgroundWorker(ctx)
 
 	return nil
 }
@@ -120,7 +120,7 @@ func (w *WAL) LoadRecords() ([]compute.Query, error) {
 	return records, nil
 }
 
-func (w *WAL) StartBackgroundWorker(ctx context.Context) {
+func (w *WAL) startBackgroundWorker(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(w.config.FlushingBatchTimeout)
 		defer ticker.Stop()

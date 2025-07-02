@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"github.com/TimonKK/inmemory-db/internal/database/compute"
-	"github.com/TimonKK/inmemory-db/internal/database/storage/wal"
 	"go.uber.org/zap"
 )
 
@@ -13,13 +12,19 @@ type Engine interface {
 	Delete(context.Context, string) error
 }
 
+type WAL interface {
+	Start(context.Context) error
+	LoadRecords() ([]compute.Query, error)
+	Push(string) error
+}
+
 type Storage struct {
 	engine Engine
-	wal    *wal.WAL
+	wal    WAL
 	logger *zap.Logger
 }
 
-func NewStorage(engine Engine, wal *wal.WAL, logger *zap.Logger) (*Storage, error) {
+func NewStorage(engine Engine, wal WAL, logger *zap.Logger) (*Storage, error) {
 	storage := Storage{
 		engine: engine,
 		wal:    wal,
