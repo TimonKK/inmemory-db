@@ -7,6 +7,7 @@ import (
 	"github.com/TimonKK/inmemory-db/internal/config"
 	"github.com/TimonKK/inmemory-db/internal/database/network"
 	"go.uber.org/zap"
+	"io"
 	"os"
 	"strings"
 )
@@ -47,6 +48,11 @@ func main() {
 
 		response, err := client.Send(trimmedInput)
 		if err != nil {
+			if err == io.EOF {
+				logger.Fatal("client connection closed", zap.Error(err))
+				return
+			}
+
 			logger.Error("failed to exec query", zap.Error(err))
 		}
 

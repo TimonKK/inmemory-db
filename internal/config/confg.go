@@ -18,6 +18,7 @@ var (
 	ErrEmptyAddressConfig   = errors.New("network address cannot be empty")
 	ErrInvalidAddressFormat = errors.New("network address must valid host:port")
 	ErrInvalidParamRange    = errors.New("must be in range")
+	ErrEmptyFilePath        = errors.New("file path cannot be empty")
 )
 
 // EngineConfig - настройки движка
@@ -43,14 +44,22 @@ type NetworkConfig struct {
 
 // LoggingConfig - настройки логирования
 type LoggingConfig struct {
-	Level  string `yaml:"level"`  // "debug", "info", "warn", "error"
-	Output string `yaml:"output"` // путь к файлу или "stdout"
+	Level  string `yaml:"level" default:"info"`        // "debug", "info", "warn", "error"
+	Output string `yaml:"output" default:"output.log"` // путь к файлу или "stdout"
+}
+
+type WALConfig struct {
+	FlushingBatchSize    int           `yaml:"flushing_batch_size" default:"100"`
+	FlushingBatchTimeout time.Duration `yaml:"flushing_batch_timeout" default:"10ms"`
+	MaxSegmentSize       SizeInBytes   `yaml:"max_segment_size" default:"10MB"`
+	DataDirectory        string        `yaml:"data_directory" default:"wal"`
 }
 
 // Config - основная структура конфигурации
 type Config struct {
 	Engine  EngineConfig  `yaml:"engine"`
 	Network NetworkConfig `yaml:"network"`
+	Wal     WALConfig     `yaml:"wal"`
 	Logging LoggingConfig `yaml:"logging"`
 }
 
@@ -78,8 +87,12 @@ func (s *SizeInBytes) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 // LoadConfig загружает конфиг из файла и валидирует его
-func LoadConfig(filePath string) (*Config, error) {
-	data, err := os.ReadFile(filePath)
+func LoadConfig(configPath string) (*Config, error) {
+	if configPath == "" {
+		configPath = "config.yaml"
+	}
+
+	data, err := os.ReadFile(configPath)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
@@ -110,6 +123,31 @@ func (c *Config) Validate() error {
 	if err := c.validateLogging(); err != nil {
 		return err
 	}
+
+	if err := c.validateWAL(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Config) validateWAL() error {
+	if c.Wal.FlushingBatchSize <= 0 || c.Wal.FlushingBatchSize > 1<<30 {
+		return fmt.Errorf("flushing_batch_size %w [1, 1^30], but got %d", ErrInvalidParamRange, c.Wal.FlushingBatchSize)
+	}
+
+	if c.Wal.FlushingBatchTimeout < 0 || c.Wal.FlushingBatchTimeout > 5*time.Minute {
+		return fmt.Errorf("flushing_batch_timeout %w [1s, 5m], but got %d", ErrInvalidParamRange, c.Wal.FlushingBatchTimeout)
+	}
+
+	if c.Wal.MaxSegmentSize <= 0 || c.Wal.MaxSegmentSize > 1<<30 {
+		return fmt.Errorf("max_segment_size %w [1, 1^30] byte, but got %d", ErrInvalidParamRange, c.Wal.MaxSegmentSize)
+	}
+
+	if c.Wal.DataDirectory == "" {
+		return fmt.Errorf("config empty wal path %w", ErrEmptyFilePath)
+	}
+
 	return nil
 }
 
@@ -167,11 +205,11 @@ func (c *Config) validateLogging() error {
 	}
 
 	if !validLevels[strings.ToLower(c.Logging.Level)] {
-		return fmt.Errorf("Config invalid log level: %s", c.Logging.Level)
+		return fmt.Errorf("config invalid log level: %s", c.Logging.Level)
 	}
 
 	if c.Logging.Output == "" {
-		return fmt.Errorf("Config log output cannot be empty")
+		return fmt.Errorf("config empty output path %w", ErrEmptyFilePath)
 	}
 
 	return nil

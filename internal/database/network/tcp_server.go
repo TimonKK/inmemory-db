@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-type RequestHandler = func(context.Context, string) string
+type RequestHandler = func(context.Context, string) (string, error)
 
 type TCPServer struct {
 	// TODO указатель?!
@@ -47,7 +47,7 @@ func (s *TCPServer) Start() error {
 	return nil
 }
 
-func (s *TCPServer) Shutdown(ctx context.Context) error {
+func (s *TCPServer) Shutdown() error {
 	err := s.listener.Close()
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func (s *TCPServer) handleConnect(ctx context.Context, conn net.Conn, handler Re
 
 	for {
 		if s.config.IdleTimeout != 0 {
-			if err := conn.SetReadDeadline(time.Now().Add(time.Duration(s.config.IdleTimeout))); err != nil {
+			if err := conn.SetReadDeadline(time.Now().Add(s.config.IdleTimeout)); err != nil {
 				s.logger.Error("failed to set read deadline", zap.Duration("IdleTimeout", s.config.IdleTimeout), zap.Error(err))
 				return err
 			}
@@ -115,16 +115,19 @@ func (s *TCPServer) handleConnect(ctx context.Context, conn net.Conn, handler Re
 			return err
 		}
 
-		// не читаем конечный \n
 		s.logger.Info("handleConnect: request", zap.String("request", query))
-		response := handler(ctx, query)
-		s.logger.Info("handleConnect: response", zap.String("response", response))
+		res, err := handler(ctx, query)
+		if err != nil {
+			s.logger.Error("handleConnect: failed to handle request", zap.Error(err))
+			return err
+		}
+		s.logger.Info("handleConnect: response", zap.String("response", res))
 
-		if _, err := conn.Write([]byte(response + "\n")); err != nil {
+		if _, err := conn.Write([]byte(res + "\n")); err != nil {
 			s.logger.Error(
 				"handleConnect: failed to write data",
 				zap.String("address", conn.RemoteAddr().String()),
-				zap.String("response", string(response)),
+				zap.String("response", string(res)),
 				zap.Error(err),
 			)
 

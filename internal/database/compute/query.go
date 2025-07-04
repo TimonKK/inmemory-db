@@ -27,6 +27,16 @@ func NewQuery(id CommandId, args []string) Query {
 	}
 }
 
+func NewQueryFromString(s string) Query {
+	data := strings.Split(s, ";")
+	key, args := data[0], strings.Split(data[1], ",")
+
+	return Query{
+		id:   CommandId(key),
+		args: args,
+	}
+}
+
 func (q *Query) Validate() error {
 	if q.id == GetCommandId && len(q.args) != GetCommandArgsCount {
 		return fmt.Errorf("%w: expected=%d, got=%d", ErrQueryArgsCount, 1, len(q.args))
@@ -50,7 +60,7 @@ func (q *Query) Validate() error {
 }
 
 func (q *Query) String() string {
-	return fmt.Sprintf("id=%s, args=%s", q.id, strings.Join(q.args, " "))
+	return fmt.Sprintf("%s;%s", q.id, strings.Join(q.args, ","))
 }
 
 func (q *Query) CommandId() CommandId {
@@ -63,4 +73,8 @@ func (q *Query) Key() string {
 
 func (q *Query) Value() string {
 	return q.args[1]
+}
+
+func (q *Query) Args() []string {
+	return q.args
 }
