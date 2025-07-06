@@ -45,7 +45,7 @@ func (c *Compute) parseQuery(query string) (Query, error) {
 	commandId, args := CommandId(tokens[0]), tokens[1:]
 
 	switch commandId {
-	case GetCommandId, SetCommandId, DeleteCommandId:
+	case GetCommandId, SetCommandId, DeleteCommandId, ReplicationCommandId:
 		return NewQuery(commandId, args), nil
 	default:
 		return Query{}, ErrUnknownQuery

@@ -1,17 +1,14 @@
 package wal
 
 import (
-	"bufio"
 	"context"
-	"github.com/TimonKK/inmemory-db/internal/config"
-	"github.com/TimonKK/inmemory-db/internal/database/compute"
-	"github.com/TimonKK/inmemory-db/internal/utils"
-	"go.uber.org/zap"
-	"os"
-	"path"
-	"slices"
+	"iter"
 	"sync"
 	"time"
+
+	"github.com/TimonKK/inmemory-db/internal/config"
+	"github.com/TimonKK/inmemory-db/internal/utils"
+	"go.uber.org/zap"
 )
 
 type walRecord struct {
@@ -20,104 +17,25 @@ type walRecord struct {
 }
 
 type WAL struct {
-	config *config.WALConfig
-	logger *zap.Logger
+	config       *config.WALConfig
+	logger       *zap.Logger
+	chunkManager *ChunkManager
 
 	mu      sync.RWMutex
-	segment *Segment
-
 	batch   []walRecord
 	batchCh chan []walRecord
 }
 
-func NewWAL(config *config.WALConfig, logger *zap.Logger) *WAL {
+func NewWAL(chunkManager *ChunkManager, config *config.WALConfig, logger *zap.Logger) *WAL {
 	w := WAL{
-		config:  config,
-		logger:  logger,
-		segment: NewSegment(config.DataDirectory, int(config.MaxSegmentSize)),
-		batch:   make([]walRecord, 0, config.FlushingBatchSize),
-		batchCh: make(chan []walRecord, 1),
+		config:       config,
+		logger:       logger,
+		chunkManager: chunkManager,
+		batch:        make([]walRecord, 0, config.FlushingBatchSize),
+		batchCh:      make(chan []walRecord, 1),
 	}
 
 	return &w
-}
-
-func (w *WAL) Start(ctx context.Context) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-
-	err := w.segment.Open()
-	if err != nil {
-		return err
-	}
-
-	// TODO добавить явную обработку ошибок и выход при ее наступлении
-	w.startBackgroundWorker(ctx)
-
-	return nil
-}
-
-func (w *WAL) LoadRecords() ([]compute.Query, error) {
-	// получить список файлов вида wal.N.log
-	walFiles := make([]string, 0)
-	dir, err := os.ReadDir(w.config.DataDirectory)
-	if err != nil {
-		return nil, err
-	}
-
-	// пройтись по всем файлам
-	for _, file := range dir {
-		if file.IsDir() {
-			continue
-		}
-
-		fileInfo, err := file.Info()
-		if err != nil {
-			return nil, err
-		}
-
-		if fileInfo.Size() == 0 {
-			continue
-		}
-
-		isMatch := SegmentNameR.MatchString(file.Name())
-		if isMatch {
-			fileName := path.Join(w.config.DataDirectory, file.Name())
-			walFiles = append(walFiles, fileName)
-		}
-	}
-
-	slices.Sort(walFiles)
-
-	records := make([]compute.Query, 0)
-
-	for _, fileName := range walFiles {
-		file, err := os.Open(fileName)
-		if err != nil {
-			return nil, err
-		}
-
-		// закроем только при выходе из функции, а не цикла!
-		defer func(file *os.File) {
-			err := file.Close()
-			if err != nil {
-				w.logger.Error("failed to close file", zap.Error(err))
-			}
-		}(file)
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			query := compute.NewQueryFromString(scanner.Text())
-			records = append(records, query)
-		}
-
-		if err := scanner.Err(); err != nil {
-			return nil, err
-		}
-	}
-
-	return records, nil
 }
 
 func (w *WAL) startBackgroundWorker(ctx context.Context) {
@@ -151,22 +69,6 @@ func (w *WAL) startBackgroundWorker(ctx context.Context) {
 	}()
 }
 
-// Push - отправка данных в WAL. Блокируется пока WAL не запишет данные на диск
-func (w *WAL) Push(data string) error {
-	p := utils.NewPromise[error]()
-
-	w.mu.Lock()
-	w.batch = append(w.batch, walRecord{data, p})
-	if len(w.batch) == w.config.FlushingBatchSize {
-		w.batchCh <- w.batch
-		w.batch = nil
-	}
-	w.mu.Unlock()
-
-	// блокируемся
-	return p.Get()
-}
-
 // TODO придумать что делать, если вызов segment.Write или Flush вернули ошибку:
 // - ничего не делать
 // - отправтиь дальше, не трогая promises
@@ -176,11 +78,11 @@ func (w *WAL) flushBatch(batch []walRecord) error {
 		return nil
 	}
 
-	w.logger.Info("FlushData: start", zap.Int("batchSize", len(batch)), zap.Int("segmentSize", w.segment.Size()))
+	w.logger.Info("FlushData: start", zap.Int("batchSize", len(batch)), zap.Int("segmentSize", w.chunkManager.Size()))
 
 	promises := make([]utils.Promise[error], 0, len(batch))
 	for _, walRecord := range batch {
-		err := w.segment.Write(walRecord.data + "\n")
+		err := w.chunkManager.Write([]byte(walRecord.data + "\n"))
 		if err != nil {
 			return err
 		}
@@ -188,7 +90,7 @@ func (w *WAL) flushBatch(batch []walRecord) error {
 		promises = append(promises, walRecord.promise)
 	}
 
-	err := w.segment.Flush()
+	err := w.chunkManager.Flush()
 	if err != nil {
 		return err
 	}
@@ -209,4 +111,44 @@ func (w *WAL) flush() error {
 	w.mu.Unlock()
 
 	return w.flushBatch(batch)
+}
+
+func (w *WAL) Start(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	if err := w.chunkManager.Open(); err != nil {
+		return err
+	}
+
+	// TODO добавить явную обработку ошибок и выход при ее наступлении
+	w.startBackgroundWorker(ctx)
+
+	return nil
+}
+
+// All - итератор по данным wal-файлов. Читает файл по порядку, каждая строка отделена \n
+func (w *WAL) All() iter.Seq2[string, error] {
+	return w.chunkManager.All()
+}
+
+// Push - отправка данных в WAL. Блокируется пока WAL не запишет данные на диск
+func (w *WAL) Push(data string) error {
+	p := utils.NewPromise[error]()
+
+	w.mu.Lock()
+	w.batch = append(w.batch, walRecord{data, p})
+	if len(w.batch) == w.config.FlushingBatchSize {
+		w.batchCh <- w.batch
+		w.batch = nil
+	}
+	w.mu.Unlock()
+
+	// блокируемся
+	return p.Get()
+}
+
+func (w *WAL) GetWalFiles() ([]string, error) {
+	return w.chunkManager.GetWalFiles()
 }

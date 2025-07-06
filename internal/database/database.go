@@ -81,16 +81,14 @@ func (db *Database) ExecGet(ctx context.Context, query compute.Query) (string, e
 }
 
 func (db *Database) ExecSet(ctx context.Context, query compute.Query) (string, error) {
-	err := db.storage.Set(ctx, query)
-	if err != nil {
+	if err := db.storage.Set(ctx, query); err != nil {
 		return "", err
 	}
 
 	return "ok", nil
 }
 func (db *Database) ExecDelete(ctx context.Context, query compute.Query) (string, error) {
-	err := db.storage.Delete(ctx, query)
-	if err != nil {
+	if err := db.storage.Delete(ctx, query); err != nil {
 		return "", err
 	}
 

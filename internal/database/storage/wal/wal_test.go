@@ -2,23 +2,45 @@ package wal
 
 import (
 	"context"
+	"fmt"
+	"github.com/TimonKK/inmemory-db/internal/database/fs"
+	"os"
+	"path"
+	"strconv"
+	"testing"
+	"time"
+
 	"github.com/TimonKK/inmemory-db/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"os"
-	"strconv"
-	"testing"
-	"time"
 )
+
+const MaxSegmentSize = 5 * 1024
+
+func WalPathGenerator(dir string) func(int) string {
+	return func(walId int) string {
+		return path.Join(dir, fmt.Sprintf(FormatWalFilename, walId))
+	}
+}
 
 func TestWal_Push(t *testing.T) {
 	logger := zap.NewNop()
+
+	walPathFn := WalPathGenerator("wal")
+
+	ids := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+	expectedFiles := make([]string, len(ids))
+	for i := range ids {
+		expectedFiles[i] = fmt.Sprintf(FormatWalFilename, i)
+	}
+
 	tests := []struct {
-		name      string
-		pushCount int
-		config    *config.WALConfig
+		name            string
+		pushCount       int
+		config          *config.WALConfig
+		mockFileStorage func(*fs.MockFileStorage)
 	}{
 		{
 			name:      "should resolve promise after timeout flush",
@@ -26,8 +48,15 @@ func TestWal_Push(t *testing.T) {
 			config: &config.WALConfig{
 				FlushingBatchSize:    10,
 				FlushingBatchTimeout: 1 * time.Millisecond,
-				MaxSegmentSize:       1000000,
-				DataDirectory:        os.TempDir(),
+				MaxSegmentSize:       10,
+				DataDirectory:        "wal",
+			},
+			mockFileStorage: func(m *fs.MockFileStorage) {
+				files := make([]os.DirEntry, 1)
+				files[0] = fs.NewMockDirEntry("wal/wal.0.log", 0)
+
+				m.On("ReadDir", "wal").Return(files, nil)
+				m.On("OpenFile", walPathFn(len(files)-1)).Return(&fs.MockFile{}, nil)
 			},
 		},
 
@@ -40,6 +69,15 @@ func TestWal_Push(t *testing.T) {
 				MaxSegmentSize:       1000000,
 				DataDirectory:        os.TempDir(),
 			},
+			mockFileStorage: func(m *fs.MockFileStorage) {
+				files := make([]os.DirEntry, len(expectedFiles))
+				for i := range files {
+					files[i] = fs.NewMockDirEntry(expectedFiles[i], 1000)
+				}
+
+				m.On("ReadDir", "wal").Return(files, nil)
+				m.On("OpenFile", walPathFn(len(files)-1)).Return(&fs.MockFile{}, nil)
+			},
 		},
 
 		{
@@ -51,6 +89,15 @@ func TestWal_Push(t *testing.T) {
 				MaxSegmentSize:       10,
 				DataDirectory:        os.TempDir(),
 			},
+			mockFileStorage: func(m *fs.MockFileStorage) {
+				files := make([]os.DirEntry, len(expectedFiles))
+				for i := range files {
+					files[i] = fs.NewMockDirEntry(expectedFiles[i], 1000)
+				}
+
+				m.On("ReadDir", "wal").Return(files, nil)
+				m.On("OpenFile", walPathFn(len(files)-1)).Return(&fs.MockFile{}, nil)
+			},
 		},
 	}
 
@@ -58,7 +105,11 @@ func TestWal_Push(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g, ctx := errgroup.WithContext(context.Background())
 
-			wal := NewWAL(tt.config, logger)
+			mockFileStorage := new(fs.MockFileStorage)
+			tt.mockFileStorage(mockFileStorage)
+
+			s := NewChunkManager(mockFileStorage, "wal", MaxSegmentSize, logger)
+			wal := NewWAL(s, tt.config, logger)
 			err := wal.Start(ctx)
 			require.NoError(t, err)
 

@@ -33,6 +33,12 @@ func TestConfig_Validate(t *testing.T) {
 					MaxSegmentSize:       10 << 20,
 					DataDirectory:        "wal",
 				},
+				Replication: &ReplicationConfig{
+					ReplicaType:       "master",
+					MasterAddress:     "127.0.0.1:8080",
+					SyncInterval:      0,
+					MaxReplicasNumber: 1,
+				},
 			},
 			wantErr: false,
 		},
@@ -151,6 +157,11 @@ wal:
   flushing_batch_timeout: "1s"
   max_segment_size: "1MB"
   data_directory: "wal111"
+replication:
+  replica_type: "slave"
+  master_address: "127.0.0.1:8082"
+  sync_interval: "11s"
+  max_replicas_number: 101
 `
 
 	tmpFile, err := os.CreateTemp("", "config_test_*.yaml")
@@ -190,6 +201,12 @@ wal:
 			FlushingBatchTimeout: 1 * time.Second,
 			MaxSegmentSize:       1 << 20,
 			DataDirectory:        "wal111",
+		},
+		Replication: &ReplicationConfig{
+			ReplicaType:       "slave",
+			MasterAddress:     "127.0.0.1:8082",
+			SyncInterval:      11 * time.Second,
+			MaxReplicasNumber: 101,
 		},
 	}
 

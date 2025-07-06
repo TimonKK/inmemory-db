@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/TimonKK/inmemory-db/internal/config"
-	"go.uber.org/zap"
 	"io"
 	"net"
+	"strings"
+
+	"github.com/TimonKK/inmemory-db/internal/config"
+	"go.uber.org/zap"
 )
 
 type TCPClient struct {
@@ -76,7 +78,7 @@ func (c *TCPClient) Send(query string) (string, error) {
 		return "", err
 	}
 
-	return response, nil
+	return strings.TrimSuffix(response, "\n"), nil
 }
 
 func (c *TCPClient) Close() error {
