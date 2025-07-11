@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -24,14 +25,8 @@ type TCPServer struct {
 }
 
 func NewTCPServer(config config.NetworkConfig, logger *zap.Logger) (*TCPServer, error) {
-	listener, err := net.Listen("tcp", config.Address)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to listen %s", err, config.Address)
-	}
 
 	server := &TCPServer{
-		listener: listener,
-
 		config: config,
 		logger: logger,
 	}
@@ -44,46 +39,58 @@ func NewTCPServer(config config.NetworkConfig, logger *zap.Logger) (*TCPServer, 
 }
 
 func (s *TCPServer) Start() error {
+	listener, err := net.Listen("tcp", s.config.Address)
+	if err != nil {
+		return fmt.Errorf("%w: failed to listen %s", err, s.config.Address)
+	}
+
+	s.listener = listener
+
 	return nil
 }
 
 func (s *TCPServer) Shutdown() error {
-	err := s.listener.Close()
-	if err != nil {
-		return err
+	if s.listener == nil {
+		return nil
 	}
 
-	return nil
+	return s.listener.Close()
 }
 
 func (s *TCPServer) HandleConnect(ctx context.Context, handler RequestHandler) {
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-
-		conn, err := s.listener.Accept()
-		if err != nil {
-			s.logger.Error("failed to accept connection", zap.Error(err))
-			break
-		}
-
-		// TODO добавить методв TryAcquire, чтобы если нельзя - ответить клиенту ошибкой что нельзя
-		s.tryAcquire()
-
-		s.logger.Info("handleConnect: handling new connection", zap.String("remote", conn.RemoteAddr().String()))
-
-		go func() {
-			defer s.Release()
-
-			err := s.handleConnect(ctx, conn, handler)
-			if err != nil {
-				// TODO добавить контексту, а что за коннект: ip, какие данные может успели прочитать
-				s.logger.Error("failed to handle connect", zap.Error(err))
+	go func() {
+		for {
+			if ctx.Err() != nil {
 				return
 			}
-		}()
-	}
+
+			// подумать как прокидывать ошибку в основной потом и что с ним там делать
+			if s.listener == nil {
+				s.logger.Error("HandleConnect was started before TCPServer.Start")
+				return
+			}
+
+			conn, err := s.listener.Accept()
+			if err != nil {
+				s.logger.Error("failed to accept connection", zap.Error(err))
+				break
+			}
+
+			s.tryAcquire()
+
+			s.logger.Info("handleConnect: handling new connection", zap.String("remote", conn.RemoteAddr().String()))
+
+			go func() {
+				defer s.Release()
+
+				if err := s.handleConnect(ctx, conn, handler); err != nil {
+					// TODO добавить контексту, а что за коннект: ip, какие данные может успели прочитать
+					s.logger.Error("failed to handle connect", zap.Error(err))
+					return
+				}
+			}()
+		}
+	}()
 }
 
 func (s *TCPServer) handleConnect(ctx context.Context, conn net.Conn, handler RequestHandler) error {
@@ -110,10 +117,11 @@ func (s *TCPServer) handleConnect(ctx context.Context, conn net.Conn, handler Re
 			if err != io.EOF {
 				s.logger.Error("handleConnect: failed to read data", zap.Error(err))
 			} else if len(query) >= int(s.config.MaxMessageSize) {
-				s.logger.Error("handleConnect: too much data", zap.Int("data", len(query)))
+				s.logger.Error("handleConnect: too much data", zap.Int("data", len(query)), zap.Int("max", int(s.config.MaxMessageSize)))
 			}
 			return err
 		}
+		query = strings.TrimSuffix(query, "\n")
 
 		s.logger.Info("handleConnect: request", zap.String("request", query))
 		res, err := handler(ctx, query)

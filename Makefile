@@ -9,7 +9,7 @@ build-cli:
 
 .PHONY: build-server
 build-server:
-	go build -o tmp/${CLI_APP_NAME}-cli cmd/server/main.go
+	go build -o tmp/${CLI_APP_NAME}-server cmd/server/main.go
 
 .PHONY: run-cli
 run-cli:

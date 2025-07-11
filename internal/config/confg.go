@@ -19,11 +19,13 @@ var (
 	ErrInvalidAddressFormat = errors.New("network address must valid host:port")
 	ErrInvalidParamRange    = errors.New("must be in range")
 	ErrEmptyFilePath        = errors.New("file path cannot be empty")
+	ErrReplicationType      = errors.New("invalid replication type")
 )
 
 // EngineConfig - настройки движка
 type EngineConfig struct {
-	Type string `yaml:"type"`
+	Type   string `yaml:"type"`
+	Shards int    `yaml:"shards"`
 }
 
 type SizeInBytes int64
@@ -55,12 +57,20 @@ type WALConfig struct {
 	DataDirectory        string        `yaml:"data_directory" default:"wal"`
 }
 
+type ReplicationConfig struct {
+	ReplicaType       string        `yaml:"replica_type" default:"slave"`
+	MasterAddress     string        `yaml:"master_address" default:"127.0.0.1:3232"`
+	SyncInterval      time.Duration `yaml:"sync_interval" default:"1s"`
+	MaxReplicasNumber int           `yaml:"max_replicas_number" default:"10"`
+}
+
 // Config - основная структура конфигурации
 type Config struct {
-	Engine  EngineConfig  `yaml:"engine"`
-	Network NetworkConfig `yaml:"network"`
-	Wal     WALConfig     `yaml:"wal"`
-	Logging LoggingConfig `yaml:"logging"`
+	Engine      EngineConfig       `yaml:"engine"`
+	Network     NetworkConfig      `yaml:"network"`
+	Wal         WALConfig          `yaml:"wal"`
+	Logging     LoggingConfig      `yaml:"logging"`
+	Replication *ReplicationConfig `yaml:"replication"`
 }
 
 // UnmarshalYAML SizeInBytes - кастомное правило десериализации для MaxMessageSize
@@ -128,6 +138,10 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	if err := c.validateReplication(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -159,11 +173,36 @@ func (c *Config) validateEngine() error {
 	if !validTypes[c.Engine.Type] {
 		return ErrEngineType
 	}
+
+	if c.Engine.Shards < 0 || c.Engine.Shards > 1<<30 {
+		return fmt.Errorf("engine.shards %w [1, 1^30], but got %d", ErrInvalidParamRange, c.Engine.Shards)
+	}
+
 	return nil
 }
 
 func (c *Config) validateNetwork() error {
-	address := c.Network.Address
+	err := c.validateAddress(c.Network.Address)
+	if err != nil {
+		return err
+	}
+
+	if c.Network.MaxConnections <= 0 || c.Network.MaxConnections > 100 {
+		return fmt.Errorf("max_connections %w [1, 100]", ErrInvalidParamRange)
+	}
+
+	if c.Network.MaxMessageSize <= 0 || c.Network.MaxMessageSize > 1<<30 {
+		return fmt.Errorf("max_message_size %w [1, 1^30] byte", ErrInvalidParamRange)
+	}
+
+	if c.Network.IdleTimeout < 0 || c.Network.IdleTimeout > 5*time.Minute {
+		return fmt.Errorf("idle_timeout %w [1s, 5m]", ErrInvalidParamRange)
+	}
+
+	return nil
+}
+
+func (c *Config) validateAddress(address string) error {
 	if address == "" {
 		return ErrEmptyAddressConfig
 	}
@@ -179,18 +218,6 @@ func (c *Config) validateNetwork() error {
 	p, portErr := strconv.Atoi(port)
 	if ip == nil || hostErr != nil || portErr != nil || p < 1 || p > 65535 {
 		return ErrInvalidAddressFormat
-	}
-
-	if c.Network.MaxConnections <= 0 || c.Network.MaxConnections > 100 {
-		return fmt.Errorf("max_connections %w [1, 100]", ErrInvalidParamRange)
-	}
-
-	if c.Network.MaxMessageSize <= 0 || c.Network.MaxMessageSize > 1<<30 {
-		return fmt.Errorf("max_message_size %w [1, 1^30] byte", ErrInvalidParamRange)
-	}
-
-	if c.Network.IdleTimeout < 0 || c.Network.IdleTimeout > 5*time.Minute {
-		return fmt.Errorf("idle_timeout %w [1s, 5m]", ErrInvalidParamRange)
 	}
 
 	return nil
@@ -210,6 +237,31 @@ func (c *Config) validateLogging() error {
 
 	if c.Logging.Output == "" {
 		return fmt.Errorf("config empty output path %w", ErrEmptyFilePath)
+	}
+
+	return nil
+}
+
+func (c *Config) validateReplication() error {
+	validType := map[string]bool{
+		"master": true,
+		"slave":  true,
+	}
+
+	if c.Replication.ReplicaType == "" {
+		return fmt.Errorf("config empty replica type: %s", c.Replication.ReplicaType)
+	}
+
+	if !validType[strings.ToLower(c.Replication.ReplicaType)] {
+		return fmt.Errorf("%w, got replica_type=%s", ErrReplicationType, c.Replication.ReplicaType)
+	}
+
+	if err := c.validateAddress(c.Replication.MasterAddress); err != nil {
+		return err
+	}
+
+	if c.Replication.SyncInterval < 0 || c.Replication.SyncInterval > 5*time.Minute {
+		return fmt.Errorf("sync_interval %w [1s, 5m], but got %d", ErrInvalidParamRange, c.Replication.SyncInterval)
 	}
 
 	return nil

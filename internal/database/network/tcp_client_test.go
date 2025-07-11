@@ -121,12 +121,12 @@ func TestTCPClient_Connect_Failure(t *testing.T) {
 
 func TestTCPClient_Send_Success(t *testing.T) {
 	request := "GET a"
-	expectedResponse := "no data\n"
+	expectedResponse := "no data"
 	serverHandler := func(conn net.Conn) {
 		query, err := bufio.NewReader(conn).ReadString('\n')
 		require.NoError(t, err)
 		assert.Equal(t, request+"\n", query)
-		_, err = conn.Write([]byte(expectedResponse))
+		_, err = conn.Write([]byte(expectedResponse + "\n"))
 		require.NoError(t, err)
 	}
 	mockServer := newMockTCPServer(t, serverHandler)
@@ -148,13 +148,13 @@ func TestTCPClient_Send_Success(t *testing.T) {
 
 func TestTCPClient_Send_NotConnected_AutoConnects(t *testing.T) {
 	request := "SET a 1"
-	expectedResponse := "ok\n"
+	expectedResponse := "ok"
 	serverHandler := func(conn net.Conn) {
 		query, err := bufio.NewReader(conn).ReadString('\n')
 		require.NoError(t, err)
 		assert.Equal(t, request+"\n", query)
 
-		_, err = conn.Write([]byte(expectedResponse))
+		_, err = conn.Write([]byte(expectedResponse + "\n"))
 		require.NoError(t, err)
 	}
 	mockServer := newMockTCPServer(t, serverHandler)

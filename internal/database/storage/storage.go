@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/TimonKK/inmemory-db/internal/database/compute"
 	"go.uber.org/zap"
+	"iter"
 )
 
 type Engine interface {
@@ -14,7 +15,7 @@ type Engine interface {
 
 type WAL interface {
 	Start(context.Context) error
-	LoadRecords() ([]compute.Query, error)
+	All() iter.Seq2[string, error]
 	Push(string) error
 }
 
@@ -34,9 +35,25 @@ func NewStorage(engine Engine, wal WAL, logger *zap.Logger) (*Storage, error) {
 	return &storage, nil
 }
 
-func (s *Storage) setData(ctx context.Context, records []compute.Query) error {
-	var err error
-	for _, query := range records {
+func (s *Storage) pushToWal(query compute.Query) error {
+	if s.wal == nil {
+		return nil
+	}
+
+	return s.wal.Push(query.String())
+}
+
+func (s *Storage) recoveryData(ctx context.Context) error {
+	for record, err := range s.wal.All() {
+		if err != nil {
+			return err
+		}
+
+		query, err := compute.NewQueryFromString(record)
+		if err != nil {
+			return err
+		}
+
 		switch query.CommandId() {
 		case compute.SetCommandId:
 			err = s.engine.Set(ctx, query.Key(), query.Value())
@@ -49,15 +66,7 @@ func (s *Storage) setData(ctx context.Context, records []compute.Query) error {
 		}
 	}
 
-	return err
-}
-
-func (s *Storage) pushToWal(query compute.Query) error {
-	if s.wal == nil {
-		return nil
-	}
-
-	return s.wal.Push(query.String())
+	return nil
 }
 
 func (s *Storage) Start(ctx context.Context) error {
@@ -69,13 +78,7 @@ func (s *Storage) Start(ctx context.Context) error {
 		return nil
 	}
 
-	records, err := s.wal.LoadRecords()
-	if err != nil {
-		return err
-	}
-	s.logger.Info("loading records", zap.Int("records", len(records)))
-
-	err = s.setData(ctx, records)
+	err := s.recoveryData(ctx)
 	if err != nil {
 		return err
 	}

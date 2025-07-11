@@ -3,29 +3,50 @@ package engine
 import (
 	"context"
 	"errors"
+	"hash/fnv"
 	"sync"
 )
+
+const dataShartNum = 1024
 
 var (
 	ErrKeyNotFound = errors.New("key not found")
 )
 
-type MemoryEngine struct {
+type dataShard struct {
 	m    sync.RWMutex
 	data map[string]string
 }
 
+type MemoryEngine struct {
+	shards []*dataShard
+}
+
 func NewMemoryEngine() *MemoryEngine {
+	shards := make([]*dataShard, dataShartNum)
+	for i := range shards {
+		shards[i] = &dataShard{
+			data: make(map[string]string),
+		}
+	}
+
 	return &MemoryEngine{
-		data: make(map[string]string),
+		shards: shards,
 	}
 }
 
-func (e *MemoryEngine) Get(_ context.Context, key string) (string, error) {
-	e.m.RLock()
-	defer e.m.RUnlock()
+func (e *MemoryEngine) getShardId(key string) int {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(key))
+	return int(h.Sum32() % dataShartNum)
+}
 
-	value, ok := e.data[key]
+func (e *MemoryEngine) Get(_ context.Context, key string) (string, error) {
+	shard := e.shards[e.getShardId(key)]
+	shard.m.RLock()
+	defer shard.m.RUnlock()
+
+	value, ok := shard.data[key]
 	if ok {
 		return value, nil
 	}
@@ -34,19 +55,21 @@ func (e *MemoryEngine) Get(_ context.Context, key string) (string, error) {
 }
 
 func (e *MemoryEngine) Set(_ context.Context, key string, value string) error {
-	e.m.Lock()
-	defer e.m.Unlock()
+	shard := e.shards[e.getShardId(key)]
+	shard.m.Lock()
+	defer shard.m.Unlock()
 
-	e.data[key] = value
+	shard.data[key] = value
 
 	return nil
 }
 
 func (e *MemoryEngine) Delete(_ context.Context, key string) error {
-	e.m.Lock()
-	defer e.m.Unlock()
+	shard := e.shards[e.getShardId(key)]
+	shard.m.Lock()
+	defer shard.m.Unlock()
 
-	delete(e.data, key)
+	delete(shard.data, key)
 
 	return nil
 }
