@@ -16,6 +16,7 @@ import (
 
 type Replication struct {
 	tcpServer *network.TCPServer
+	tcpClient *network.TCPClient
 	cm        *wal.ChunkManager
 	compute   database.Compute
 	config    *config.ReplicationConfig
@@ -51,83 +52,113 @@ func (r *Replication) startBackgroundWorker(ctx context.Context) {
 }
 
 func (r *Replication) sync() error {
-	r.logger.Info("start sync")
-	defer r.logger.Info("end sync")
+	r.logger.Debug("start sync")
+	defer r.logger.Debug("end sync")
+
 	localWals, err := r.cm.GetWalFiles()
 	if err != nil {
 		return err
 	}
 
-	// make TCP request to master
-	cfg := config.ClientNetworkConfig{
-		Address:     r.config.MasterAddress,
-		IdleTimeout: 1 * time.Minute,
-	}
-
-	client, err := network.NewTCPClient(&cfg, r.logger)
-	if err != nil {
-		return err
-	}
-
 	// получить список wal-сегментов
-	res, err := client.Send(string(compute.ReplicationCommandId))
+	res, err := r.tcpClient.Send(string(compute.ReplicationCommandId))
 	if err != nil {
 		return err
 	}
 
+	r.logger.Debug("Got wals from master", zap.String("remoteWals", res))
 	remoteWals := strings.Split(res, ",")
-	r.logger.Info("Got wals from master", zap.String("remoteWals", res))
 
 	// если данные синхроны
 	if slices.Equal(localWals, remoteWals) {
-		r.logger.Info("all sync!")
+		r.logger.Debug("all sync!")
 		return nil
 	}
 
 	// если отличие на один сегмент - скачать только его
 	if slices.Equal(localWals, remoteWals[:len(remoteWals)-1]) {
-		lastWalName := remoteWals[len(remoteWals)-1]
-		data, err := client.Send(fmt.Sprintf("%s %s", string(compute.ReplicationCommandId), lastWalName))
-		if err != nil {
-			return err
-		}
-
-		if err = r.cm.Save(lastWalName, strings.Split(data, ",")); err != nil {
-			return err
-		}
-
-		r.logger.Info("sync complete", zap.String("wal", lastWalName))
-
-		return nil
+		return r.downloadWal(remoteWals[len(remoteWals)-1])
 	}
 
 	// Если дошли сюда - отличаются больше чем один файл - нужно перекачать все wal-файлы с мастера
-	r.logger.Info("slave too old, start full sync!")
+	r.logger.Debug("slave too old, start full sync!")
 	if err := r.cm.Reset(); err != nil {
 		return err
 	}
 
-	for _, remoteWal := range remoteWals {
-		data, err := client.Send(fmt.Sprintf("%s %s", string(compute.ReplicationCommandId), remoteWal))
-		if err != nil {
-			return err
-		}
+	return r.downloadAllWals(remoteWals)
+}
 
-		err = r.cm.Save(remoteWal, strings.Split(data, ","))
-		if err != nil {
-			return err
-		}
-
-		r.logger.Info("sync complete", zap.String("wal", remoteWal))
+func (r *Replication) replicationExec(query compute.Query) (string, error) {
+	localWalFiles, err := r.cm.GetWalFiles()
+	if err != nil {
+		return "", err
 	}
 
-	r.logger.Info("full sync complete")
+	// get wal list
+	walFile := query.Key()
+	if walFile == "" {
+		return strings.Join(localWalFiles, ","), nil
+	}
+
+	// get specific wal file data
+	if !slices.Contains(localWalFiles, walFile) {
+		return "", fmt.Errorf("replication file %s not found", walFile)
+	}
+
+	var res strings.Builder
+	for line, err := range r.cm.ChunkLines(walFile) {
+		if err != nil {
+			return "", err
+		}
+
+		res.WriteString(line + ",")
+	}
+
+	return res.String(), nil
+}
+
+func (r *Replication) downloadWal(walName string) error {
+	data, err := r.tcpClient.Send(fmt.Sprintf("%s %s", string(compute.ReplicationCommandId), walName))
+	if err != nil {
+		return err
+	}
+
+	if err = r.cm.Save(walName, strings.Split(data, ",")); err != nil {
+		return err
+	}
+
+	r.logger.Debug("sync complete", zap.String("wal", walName))
+
+	return nil
+}
+
+func (r *Replication) downloadAllWals(remoteWals []string) error {
+	for _, remoteWal := range remoteWals {
+		if err := r.downloadWal(remoteWal); err != nil {
+			return err
+		}
+
+		r.logger.Debug("sync complete", zap.String("wal", remoteWal))
+	}
+
+	r.logger.Debug("full sync complete")
 
 	return nil
 }
 
 func (r *Replication) Start(ctx context.Context) error {
 	if r.config.ReplicaType == ReplicaTypeSlave {
+		tcpClient, err := network.NewTCPClient(&config.ClientNetworkConfig{
+			Address:     r.config.MasterAddress,
+			IdleTimeout: 1 * time.Minute,
+		}, r.logger)
+		if err != nil {
+			return err
+		}
+
+		r.tcpClient = tcpClient
+
 		r.startBackgroundWorker(ctx)
 		return nil
 	}
@@ -155,38 +186,13 @@ func (r *Replication) Start(ctx context.Context) error {
 			return "", err
 		}
 
-		r.logger.Info("Replication query", zap.String("query", queryStr))
+		r.logger.Debug("Replication query", zap.String("query", queryStr))
 
 		if query.CommandId() != compute.ReplicationCommandId {
 			return "", fmt.Errorf("only replication command expected, but got %s", queryStr)
 		}
 
-		wals, err := r.cm.GetWalFiles()
-		if err != nil {
-			return "", err
-		}
-
-		// get wal list
-		walFile := query.Key()
-		if walFile == "" {
-			return strings.Join(wals, ","), nil
-		}
-
-		// get specific wal file data
-		if !slices.Contains(wals, walFile) {
-			return "", fmt.Errorf("replication file %s not found", walFile)
-		}
-
-		var res strings.Builder
-		for line, err := range r.cm.ChunkLines(walFile) {
-			if err != nil {
-				return "", err
-			}
-
-			res.WriteString(line + ",")
-		}
-
-		return res.String(), nil
+		return r.replicationExec(query)
 	})
 
 	return nil
