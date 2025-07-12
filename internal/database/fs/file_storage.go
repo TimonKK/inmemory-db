@@ -7,7 +7,6 @@ import (
 	"iter"
 	"os"
 
-	//"github.com/TimonKK/inmemory-db/internal/database/storage/wal"
 	"go.uber.org/zap"
 )
 

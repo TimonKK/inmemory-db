@@ -12,8 +12,6 @@ import (
 var _ os.FileInfo = (*MockFileInfo)(nil)
 var _ os.DirEntry = (*MockDirEntry)(nil)
 
-//var _ FileManager = (*MockFileStorage)(nil)
-
 type MockFileInfo struct {
 	name string
 	size int64

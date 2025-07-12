@@ -27,8 +27,6 @@ type TCPServer struct {
 func NewTCPServer(config config.NetworkConfig, logger *zap.Logger) (*TCPServer, error) {
 
 	server := &TCPServer{
-		//listener: listener,
-
 		config: config,
 		logger: logger,
 	}
@@ -78,7 +76,6 @@ func (s *TCPServer) HandleConnect(ctx context.Context, handler RequestHandler) {
 				break
 			}
 
-			// TODO добавить методв TryAcquire, чтобы если нельзя - ответить клиенту ошибкой что нельзя
 			s.tryAcquire()
 
 			s.logger.Info("handleConnect: handling new connection", zap.String("remote", conn.RemoteAddr().String()))
