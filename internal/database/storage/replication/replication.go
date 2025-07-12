@@ -151,7 +151,7 @@ func (r *Replication) Start(ctx context.Context) error {
 	if r.config.ReplicaType == ReplicaTypeSlave {
 		tcpClient, err := network.NewTCPClient(&config.ClientNetworkConfig{
 			Address:     r.config.MasterAddress,
-			IdleTimeout: 1 * time.Minute,
+			IdleTimeout: r.config.SyncInterval,
 		}, r.logger)
 		if err != nil {
 			return err
